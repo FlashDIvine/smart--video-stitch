@@ -190,24 +190,26 @@ async function uploadToTikTok(options) {
         await ttPage.waitForTimeout(500);
         await postBtn.click({ force: true });
 
-        // Wait for potential copyright check modal
-        await ttPage.waitForTimeout(3000);
-        const copyrightModalBtn = ttPage.locator('button:has-text("Posting sekarang"), button:has-text("Post anyway")').first();
-        if (await copyrightModalBtn.isVisible().catch(() => false)) {
-            if (!json) console.log('⚠️ Copyright check dialog detected. Confirming "Posting sekarang"...');
-            await copyrightModalBtn.click({ force: true });
+        if (!json) console.log('⏳ Awaiting publication confirmation & redirect...');
+        let isPublished = false;
+        let videoUrl = null;
+
+        for (let poll = 0; poll < 15; poll++) {
+            await ttPage.waitForTimeout(1000);
+            const copyrightModalBtn = ttPage.locator('button:has-text("Posting sekarang"), button:has-text("Post anyway")').first();
+            if (await copyrightModalBtn.isVisible().catch(() => false)) {
+                if (!json) console.log('⚠️ Copyright check dialog detected. Confirming "Posting sekarang"...');
+                await copyrightModalBtn.click({ force: true });
+            }
+
+            if (ttPage.url().includes('tiktokstudio/content')) {
+                isPublished = true;
+                break;
+            }
         }
 
-        if (!json) console.log('⏳ Awaiting publication confirmation & redirect...');
-        await ttPage.waitForTimeout(7000);
-
-        // 4. Verify Final State
-        const currentUrl = ttPage.url();
-        let videoUrl = null;
-        let isPublished = false;
-
-        if (currentUrl.includes('tiktokstudio/content')) {
-            isPublished = true;
+        if (isPublished) {
+            await ttPage.waitForTimeout(2000);
             videoUrl = await ttPage.evaluate(() => {
                 const a = document.querySelector('a[href*="/@"][href*="/video/"]');
                 return a ? a.href : null;
