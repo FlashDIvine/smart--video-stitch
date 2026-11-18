@@ -45,14 +45,14 @@ smart-video-stitch/
 Clone directly into your global Antigravity plugins directory:
 
 ```bash
-git clone https://github.com/najib/smart-video-stitch ~/.gemini/config/plugins/smart-video-stitch
+git clone https://github.com/FlashDIvine/smart--video-stitch.git ~/.gemini/config/plugins/smart-video-stitch
 ```
 
 ### Option 2: Project-Level Plugin
 Clone directly into your project's `.agents/plugins/` directory:
 
 ```bash
-git clone https://github.com/najib/smart-video-stitch .agents/plugins/smart-video-stitch
+git clone https://github.com/FlashDIvine/smart--video-stitch.git .agents/plugins/smart-video-stitch
 ```
 
 ---
