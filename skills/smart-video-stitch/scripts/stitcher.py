@@ -3,7 +3,7 @@
 Smart Video Stitcher Engine
 An automated, lossless-first video concatenator using FFmpeg and FFprobe.
 Handles audio synchronization (preventing Non-monotonic DTS warnings),
-automatic compatibility checking, and post-processing verification.
+automatic compatibility checking, tail artifact trimming, and post-processing verification.
 """
 
 import argparse
@@ -182,63 +182,104 @@ def stitch(
     mode: str = "auto",
     reencode_audio: bool = True,
     audio_bitrate: str = "192k",
+    clip_duration: float = 0.0,
+    trim_tail: float = 0.0,
     overwrite: bool = True,
 ) -> Dict[str, Any]:
-    """Main orchestration function to probe, analyze, merge, and verify."""
+    """Main orchestration function to probe, trim (if requested), merge, and verify."""
     check_ffmpeg_installed()
 
     if len(input_files) < 2:
         raise ValueError("At least two input video files are required to stitch.")
 
-    # 1. Probing
-    probes = [probe_file(p) for p in input_files]
-    compatible, reason = analyze_compatibility(probes)
-    expected_duration = sum(p["duration"] for p in probes)
+    temp_dir = None
+    processed_inputs = list(input_files)
 
-    output_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        # 1. Trimming tail or enforcing max clip duration if requested
+        if clip_duration > 0.0 or trim_tail > 0.0:
+            temp_dir = tempfile.mkdtemp(prefix="stitch_trim_")
+            processed_inputs = []
+            for idx, in_file in enumerate(input_files):
+                p_info = probe_file(in_file)
+                dur = p_info["duration"]
+                target_dur = dur
+                if clip_duration > 0.0:
+                    target_dur = min(dur, clip_duration)
+                elif trim_tail > 0.0:
+                    target_dur = max(0.5, dur - trim_tail)
 
-    # 2. Execution
-    actual_strategy = "demuxer"
-    if mode == "reencode" or (mode == "auto" and not compatible):
-        actual_strategy = "filter_complex"
-        target_w = probes[0]["width"] or 1080
-        target_h = probes[0]["height"] or 1920
-        concat_filter_complex(
-            input_paths=input_files,
-            output_path=output_file,
-            target_width=target_w,
-            target_height=target_h,
-            audio_bitrate=audio_bitrate,
-            overwrite=overwrite,
-        )
-    else:
-        concat_demuxer(
-            input_paths=input_files,
-            output_path=output_file,
-            reencode_audio=reencode_audio,
-            audio_bitrate=audio_bitrate,
-            overwrite=overwrite,
-        )
+                trimmed_path = Path(temp_dir) / f"trim_{idx:02d}_{in_file.name}"
+                trim_cmd = [
+                    "ffmpeg", "-y", "-i", str(in_file),
+                    "-t", str(target_dur),
+                    "-c", "copy",
+                    str(trimmed_path)
+                ]
+                trim_res = subprocess.run(trim_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                if trim_res.returncode != 0:
+                    fallback_cmd = [
+                        "ffmpeg", "-y", "-i", str(in_file),
+                        "-t", str(target_dur),
+                        "-c:v", "libx264", "-preset", "ultrafast",
+                        "-c:a", "aac",
+                        str(trimmed_path)
+                    ]
+                    subprocess.run(fallback_cmd, check=True)
+                processed_inputs.append(trimmed_path)
 
-    # 3. Post-verification
-    if not output_file.exists():
-        raise FileNotFoundError(f"Output file {output_file} was not generated.")
+        # 2. Probing
+        probes = [probe_file(p) for p in processed_inputs]
+        compatible, reason = analyze_compatibility(probes)
+        expected_duration = sum(p["duration"] for p in probes)
 
-    out_probe = probe_file(output_file)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    return {
-        "status": "success",
-        "strategy": actual_strategy,
-        "compatibility_reason": reason,
-        "input_count": len(input_files),
-        "expected_duration": expected_duration,
-        "output_duration": out_probe["duration"],
-        "output_file": str(output_file.resolve()),
-        "output_size_mb": round(out_probe["size_bytes"] / (1024 * 1024), 2),
-        "resolution": f"{out_probe['width']}x{out_probe['height']}",
-        "video_codec": out_probe["video_codec"],
-        "audio_codec": out_probe["audio_codec"],
-    }
+        # 3. Execution
+        actual_strategy = "demuxer"
+        if mode == "reencode" or (mode == "auto" and not compatible):
+            actual_strategy = "filter_complex"
+            target_w = probes[0]["width"] or 1080
+            target_h = probes[0]["height"] or 1920
+            concat_filter_complex(
+                input_paths=processed_inputs,
+                output_path=output_file,
+                target_width=target_w,
+                target_height=target_h,
+                audio_bitrate=audio_bitrate,
+                overwrite=overwrite,
+            )
+        else:
+            concat_demuxer(
+                input_paths=processed_inputs,
+                output_path=output_file,
+                reencode_audio=reencode_audio,
+                audio_bitrate=audio_bitrate,
+                overwrite=overwrite,
+            )
+
+        # 4. Post-verification
+        if not output_file.exists():
+            raise FileNotFoundError(f"Output file {output_file} was not generated.")
+
+        out_probe = probe_file(output_file)
+
+        return {
+            "status": "success",
+            "strategy": actual_strategy,
+            "compatibility_reason": reason,
+            "input_count": len(input_files),
+            "expected_duration": expected_duration,
+            "output_duration": out_probe["duration"],
+            "output_file": str(output_file.resolve()),
+            "output_size_mb": round(out_probe["size_bytes"] / (1024 * 1024), 2),
+            "resolution": f"{out_probe['width']}x{out_probe['height']}",
+            "video_codec": out_probe["video_codec"],
+            "audio_codec": out_probe["audio_codec"],
+        }
+    finally:
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def find_video_files(directory: Path) -> List[Path]:
@@ -258,6 +299,14 @@ def main():
     parser.add_argument(
         "--mode", "-m", choices=["auto", "lossless", "reencode"], default="auto",
         help="Concat mode: 'auto' (default: lossless if compatible, else re-encode), 'lossless', 'reencode'."
+    )
+    parser.add_argument(
+        "--clip-duration", type=float, default=0.0,
+        help="Cap max duration per clip in seconds before stitching (e.g. 7.4 for AI clips)."
+    )
+    parser.add_argument(
+        "--trim-tail", type=float, default=0.0,
+        help="Trim N seconds from the end of each clip before stitching (e.g. 0.6)."
     )
     parser.add_argument(
         "--copy-audio", action="store_true",
@@ -288,12 +337,14 @@ def main():
             mode=args.mode,
             reencode_audio=reencode_audio,
             audio_bitrate=args.audio_bitrate,
+            clip_duration=args.clip_duration,
+            trim_tail=args.trim_tail,
         )
 
         if args.json:
             print(json.dumps(report, indent=2))
         else:
-            print("\n Stitching Complete!")
+            print("\n✅ Stitching Complete!")
             print(f"Output File     : {report['output_file']}")
             print(f"Strategy        : {report['strategy']}")
             print(f"Total Clips     : {report['input_count']}")
@@ -303,7 +354,7 @@ def main():
             print(f"Video / Audio   : {report['video_codec']} / {report['audio_codec']}")
 
     except Exception as e:
-        print(f"\n Error: {e}", file=sys.stderr)
+        print(f"\n❌ Error: {e}", file=sys.stderr)
         sys.exit(1)
 
 
