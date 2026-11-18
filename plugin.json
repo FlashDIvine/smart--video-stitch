@@ -1,0 +1,7 @@
+{
+  "name": "smart-video-stitch",
+  "version": "1.0.0",
+  "description": "Smart, lossless-first FFmpeg video concatenator and inspector for social media (Shorts, Reels, TikTok) and general video pipelines.",
+  "author": "Najib",
+  "repository": "https://github.com/najib/smart-video-stitch"
+}
