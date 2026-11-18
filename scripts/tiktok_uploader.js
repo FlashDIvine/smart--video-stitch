@@ -95,8 +95,15 @@ async function removeOverlays(page) {
         document.querySelectorAll('#react-joyride-portal, .react-joyride__overlay').forEach(el => el.remove());
 
         // Dismiss Tux portal modal if accidentally opened
-        const cancelBtn = document.querySelector('#tux-portal-container button:has-text("Batal"), #tux-portal-container button:has-text("Cancel")');
-        if (cancelBtn) cancelBtn.click();
+        const tux = document.querySelector('#tux-portal-container');
+        if (tux) {
+            const buttons = Array.from(tux.querySelectorAll('button'));
+            const cancelBtn = buttons.find(b => {
+                const txt = (b.innerText || '').toLowerCase();
+                return txt.includes('batal') || txt.includes('cancel');
+            });
+            if (cancelBtn) cancelBtn.click();
+        }
     });
 }
 
