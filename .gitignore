@@ -7,3 +7,7 @@ Thumbs.db
 output*.mp4
 gabungan*.mp4
 *.log
+*.mp4
+*.mp3
+*.wav
+node_modules/

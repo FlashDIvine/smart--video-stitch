@@ -10,6 +10,7 @@ Concatenating video clips with raw FFmpeg is prone to subtle bugs:
 - **Audio Desync & Non-monotonic DTS:** Occurs when using `-c:a copy` across fragmented MP4 files with micro-offset audio timestamps.
 - **Resolution/Aspect Ratio Distortions:** Occurs when concatenating clips with differing dimensions or SAR (Sample Aspect Ratio).
 - **Silent Failures:** Occurs when FFmpeg exits with partial files or mismatched durations.
+- **Speech Cutoff Artifacts:** Occurs when naively trimming clip durations on videos that have spoken dialogue.
 
 This skill provides a battle-tested, 4-phase pipeline to inspect, decide, stitch, and verify video files.
 
@@ -35,9 +36,17 @@ Verify:
 4. Audio presence and sample rate (`sample_rate`)
 5. Total expected duration (sum of individual durations)
 
-### Phase 2: Decision Tree
+### Phase 2: Decision Tree & Trimming Rules
 
 ```
+Does the video contain vocal dialogue, speech, or voiceover?
+ ├── YES ──> PRESERVE FULL DURATION (UNCUT)
+ │           - Do NOT use --clip-duration or --trim-tail
+ │           - Keep all 8s clips uncut (e.g. 8s × 3 = 24.12s) to prevent clipping words
+ │
+ └── NO  ──> Silent Slapstick / Background Music Only
+             - Optional: Apply --clip-duration 7.4 or --trim-tail 0.6 if tail freeze artifacts exist
+
 Are all video dimensions, codecs, and frame rates identical?
  ├── YES ──> Strategy A: Concat Demuxer (Lossless Video Copy)
  │           - Video: Stream Copy (`-c:v copy`) -> 100% original quality, zero re-encode time
@@ -98,8 +107,11 @@ Confirm:
 This skill bundles an automated Python engine located at `scripts/stitcher.py`. You can invoke it directly:
 
 ```bash
-# Merge clips in a directory automatically:
+# Merge clips in a directory automatically (lossless, uncut):
 python3 <skill-dir>/scripts/stitcher.py --dir /path/to/clips -o /path/to/output.mp4
+
+# Merge clips while trimming tail freeze artifacts (ONLY for silent clips):
+python3 <skill-dir>/scripts/stitcher.py --dir /path/to/clips -o final.mp4 --clip-duration 7.4
 
 # Merge specific files in order:
 python3 <skill-dir>/scripts/stitcher.py clip1.mp4 clip2.mp4 clip3.mp4 -o final.mp4

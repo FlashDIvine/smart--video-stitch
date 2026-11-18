@@ -1,23 +1,31 @@
 # 🎬 Smart Video Stitch
 
-**A lossless-first, automated video concatenation plugin for Antigravity & AI Agents.**
+**A lossless-first video concatenator, AI video prompt engineering framework, and automated TikTok Studio publisher for Antigravity & AI Agents.**
 
-Easily merge fragmented video clips (such as YouTube Shorts, Instagram Reels, TikTok, or multi-part recordings) with zero quality loss, rock-solid audio synchronization, and automated quality verification.
+Easily merge fragmented video clips (such as YouTube Shorts, Instagram Reels, TikTok, or multi-part AI recordings) with zero quality loss, rock-solid audio synchronization, automated quality verification, and one-click direct publishing to TikTok Studio.
 
 ---
 
-## 💡 The Problem This Solves
+## 💡 Key Features & The Problems This Solves
 
-Merging video clips using raw FFmpeg often introduces subtle, frustrating bugs:
-* **Audio Desync & Stutter:** Naively running `ffmpeg -c copy` on separated MP4 clips often triggers `Non-monotonic DTS` warnings, creating audio pops or desynchronization in video players and social media uploaders.
-* **Resolution Mismatch:** Stitching clips with differing resolutions or sample aspect ratios causes stretched or distorted videos.
-* **Silent Failures:** Partial files or truncated durations when an error occurs silently.
+### 1. Lossless & Glitch-Free Video Concatenation
+* **Audio Desync & DTS Timestamp Glitches:** Naively running `ffmpeg -c copy` on separated MP4 clips triggers `Non-monotonic DTS` warnings, creating audio pops and playback stutter. **Smart Video Stitch** copies video streams losslessly (`-c:v copy`) while re-encoding audio to AAC (`-c:a aac -b:a 192k`), ensuring zero video quality degradation with microsecond-accurate audio sync.
+* **Resolution Harmonization:** Automatically scales and letterboxes/pillarboxes clips if resolutions differ.
 
-**Smart Video Stitch** solves this by implementing a **4-Phase Smart Pipeline**:
-1. **Pre-flight Probing:** Automatically checks video dimensions, framerates, codecs, and audio sample rates using `ffprobe`.
-2. **Lossless-First Decision Matrix:** Uses FFmpeg Concat Demuxer with video stream copy (`-c:v copy`) for instant, 100% original quality, while automatically re-encoding audio (`-c:a aac -b:a 192k`) to guarantee seamless timestamp synchronization without DTS errors.
-3. **Smart Fallback:** Seamlessly scales and pads clips (letterbox/pillarbox) if aspect ratios differ.
-4. **Post-Processing QA:** Verifies the final file duration and stream integrity before declaring success.
+### 2. Dialogue & Speech Preservation (Anti-Cutoff Invariant)
+* Tail trimming (`--clip-duration 7.4` or `--trim-tail 0.6`) removes generative AI tail-freeze glitches on silent slapstick clips.
+* **Invariant:** Clips with spoken voiceover or dialogue are automatically preserved **uncut** (e.g. full 8s × 3 = 24s) to ensure trailing words and syllables are never severed.
+
+### 3. Production AI Video Prompt SOP Framework (`rules/PROMPT_RULES.md`)
+* Complete 8-pillar prompt engineering architecture designed for Google Veo 3.1 & Flow.
+* Eliminates phantom floating text, anatomy morphing, and wild 360° camera spinning.
+* Strict physical screen bounding rules: text and UI elements are strictly contained within in-world computer monitors, tablets, or holographic boards.
+
+### 4. Direct TikTok Studio Publishing via CDP (`scripts/tiktok_uploader.js`)
+* Fully automated video publishing to TikTok Studio (`https://www.tiktok.com/tiktokstudio/upload`).
+* Automatically connects to your running Chrome/Brave browser via CDP (port 9222).
+* Automatically bypasses Joyride tour popups (`#react-joyride-portal`), unsaved changes modals (`#tux-portal-container`), and copyright check prompts.
+* Writes rich captions & hashtags, clicks publish, and returns the verified live post link.
 
 ---
 
@@ -29,12 +37,17 @@ smart-video-stitch/
 ├── README.md                   # Documentation & quickstart
 ├── LICENSE                     # MIT License
 ├── rules/
-│   └── AGENTS.md               # Quality and safety rules enforced on AI agents
+│   ├── AGENTS.md               # Safety, speech preservation & publishing rules for AI agents
+│   └── PROMPT_RULES.md         # 8-Pillar SOP Prompt Engineering framework for Veo 3.1 / Flow
+├── scripts/
+│   └── tiktok_uploader.js      # Automated TikTok Studio CDP publishing CLI
 └── skills/
-    └── smart-video-stitch/
-        ├── SKILL.md            # SOP guide for AI agents
-        └── scripts/
-            └── stitcher.py     # Standalone Python CLI & engine
+    ├── smart-video-stitch/
+    │   ├── SKILL.md            # Concatenation SOP guide for AI agents
+    │   └── scripts/
+    │       └── stitcher.py     # Standalone Python FFmpeg concatenation engine
+    └── tiktok-uploader/
+        └── SKILL.md            # TikTok Studio CDP publishing skill for AI agents
 ```
 
 ---
@@ -59,40 +72,62 @@ git clone https://github.com/FlashDIvine/smart--video-stitch.git .agents/plugins
 
 ## 💬 Usage with Antigravity / AI Agent
 
-Once installed, simply prompt your agent naturally:
-
+### Stitching Videos
+Simply prompt your agent naturally:
 ```text
-"Tolong gabungkan semua video di folder /home/najib/Dokumen/Yutub/cat1 menjadi satu file"
+"Tolong gabungkan semua video di folder ./clips menjadi satu video Shorts tanpa memotong dialog suara"
 ```
-or in English:
-```text
-"Merge all the video clips inside ./footage into a single vertical short video"
-```
+The agent inspects all clips with `ffprobe`, selects the optimal stream-copy strategy, and runs verification before reporting success.
 
-The agent will automatically invoke the `smart-video-stitch` skill, inspect the clips, choose the optimal strategy, run the concatenation, and verify the output.
+### Publishing to TikTok
+```text
+"Post video final.mp4 ke TikTok dengan caption 'Tutorial AI Video Otomatis 🚀 #aivideo #fyp'"
+```
+The agent invokes the `tiktok-uploader` skill, connects to your logged-in browser session, injects the video and caption, confirms publishing, and returns the live video URL.
 
 ---
 
-## 💻 Standalone CLI Usage (Without AI)
+## 💻 Standalone CLI Usage (Terminal / Scripts)
 
-You can also use the bundled Python script directly in your terminal:
-
+### 1. Stitching Videos
 ```bash
-# Merge all video files in a directory:
+# Merge clips in a directory losslessly:
 python3 skills/smart-video-stitch/scripts/stitcher.py --dir /path/to/clips -o /path/to/output.mp4
+
+# Merge clips while trimming tail-freeze artifacts (silent clips only):
+python3 skills/smart-video-stitch/scripts/stitcher.py --dir /path/to/clips -o final.mp4 --clip-duration 7.4
 
 # Merge specific files in order:
 python3 skills/smart-video-stitch/scripts/stitcher.py clip1.mp4 clip2.mp4 clip3.mp4 -o final.mp4
 
-# Output JSON report (useful for scripts & CI/CD):
+# Output JSON report:
 python3 skills/smart-video-stitch/scripts/stitcher.py --dir /path/to/clips -o final.mp4 --json
+```
+
+### 2. Publishing to TikTok Studio
+Start Chrome or Brave with remote debugging enabled:
+```bash
+brave-browser --remote-debugging-port=9222 https://www.tiktok.com/tiktokstudio
+```
+
+Then run the publisher:
+```bash
+# Publish with direct caption:
+node scripts/tiktok_uploader.js --file ./final.mp4 --caption "My Epic AI Video! 🎬 #fyp #aivideo"
+
+# Publish with caption loaded from file:
+node scripts/tiktok_uploader.js --file ./final.mp4 --caption-file ./caption.txt
+
+# Output JSON format:
+node scripts/tiktok_uploader.js --file ./final.mp4 --caption "Short title #viral" --json
 ```
 
 ---
 
 ## 📋 Requirements
 * Python 3.8+
-* `ffmpeg` and `ffprobe` installed on your system (e.g. `sudo apt install ffmpeg` on Debian/Ubuntu).
+* `ffmpeg` and `ffprobe` installed on your system (`sudo apt install ffmpeg`).
+* Node.js 18+ and `playwright-core` (for TikTok automated publishing).
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "name": "smart-video-stitch",
-  "version": "1.0.0",
-  "description": "Smart, lossless-first FFmpeg video concatenator and inspector for social media (Shorts, Reels, TikTok) and general video pipelines.",
+  "version": "1.1.0",
+  "description": "Lossless-first FFmpeg video concatenator, AI video prompt rules framework, and automated TikTok Studio publisher.",
   "author": "FlashDIvine",
   "repository": "https://github.com/FlashDIvine/smart--video-stitch"
 }
